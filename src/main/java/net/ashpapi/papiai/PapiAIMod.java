@@ -1,44 +1,65 @@
-package net.ashpapi.papiai;
+    package net.ashpapi.papiai;
 
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
+    import net.minecraftforge.api.distmarker.Dist;
+    import net.minecraftforge.common.MinecraftForge;
+    import net.minecraftforge.event.entity.player.PlayerEvent;
+    import net.minecraftforge.eventbus.api.SubscribeEvent;
+    import net.minecraftforge.fml.common.Mod;
+    import net.minecraftforge.fml.loading.FMLEnvironment;
+    import net.minecraft.network.chat.Component;
+    import net.minecraft.server.level.ServerPlayer;
 
-// главный класс мода.
-// аннотация @Mod говорит Forge, какой modid у этого мода.
-@Mod(PapiAIMod.MODID)
-public class PapiAIMod {
+    @Mod(PapiAIMod.MODID)
+    public class PapiAIMod {
 
-    // идентификатор мода. Должен совпадать с modId в mods.toml
-    public static final String MODID = "papiai";
+        public static final String MODID = "papiai";
 
-    // конструктор вызывается при загрузке мода.
-    public PapiAIMod() {
-        // регистрируем наш класс CommonEvents на шине событий.
-        // он будет слушать события, связанные с игроком.
-        MinecraftForge.EVENT_BUS.register(new CommonEvents());
-
-        // регистрируем контроллер активности мобов.
-        // этот класс будет управлять частотой тиков AI.
-        MinecraftForge.EVENT_BUS.register(new MobActivityController());
-    }
-
-    // внутренний класс для общих событий
-    public static class CommonEvents {
-
-        // событие входа игрока на сервер / в мир (в одиночке — в интегрированный сервер).
-        @SubscribeEvent
-        public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-            // проверяем, что это именно серверный игрок
-            if (event.getEntity() instanceof ServerPlayer player) {
-                // отправляем системное сообщение в чат игроку.
-                player.sendSystemMessage(
-                        Component.literal("PapiAI: мод загружен и работает.")
+        public PapiAIMod() {
+            if (FMLEnvironment.dist == Dist.CLIENT) {
+                registerClientHandlers();
+            } else {
+                MinecraftForge.EVENT_BUS.register(
+                        new MobActivityController(new NoOpCulling(), new NoOpLod())
                 );
+            }
+
+            MinecraftForge.EVENT_BUS.register(new CommonEvents());
+        }
+
+        private void registerClientHandlers() {
+            OptimizationState optimState = new OptimizationState();
+
+            EntityCullingHandler cullingHandler = new EntityCullingHandler(optimState);
+            EntityLodHandler     lodHandler     = new EntityLodHandler(optimState);
+            ParticleCullingHandler particleHandler = new ParticleCullingHandler();
+
+            MobActivityController mobController = new MobActivityController(cullingHandler, lodHandler);
+
+            MinecraftForge.EVENT_BUS.register(optimState);
+            MinecraftForge.EVENT_BUS.register(cullingHandler);
+            MinecraftForge.EVENT_BUS.register(lodHandler);
+            MinecraftForge.EVENT_BUS.register(particleHandler);
+            MinecraftForge.EVENT_BUS.register(mobController);
+            MinecraftForge.EVENT_BUS.register(new RenderEventHandler(cullingHandler, lodHandler));
+        }
+
+        private static class NoOpCulling extends EntityCullingHandler {
+            NoOpCulling() { super(null); }
+            @Override public boolean isVisible(net.minecraft.world.entity.Entity e) { return true; }
+        }
+        private static class NoOpLod extends EntityLodHandler {
+            NoOpLod() { super(null); }
+            @Override public boolean isHidden(net.minecraft.world.entity.Entity e) { return false; }
+        }
+
+        public static class CommonEvents {
+            @SubscribeEvent
+            public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+                if (event.getEntity() instanceof ServerPlayer player) {
+                    player.sendSystemMessage(
+                            Component.literal("PapiAI: симуляция и рендер включены")
+                    );
+                }
             }
         }
     }
-}
