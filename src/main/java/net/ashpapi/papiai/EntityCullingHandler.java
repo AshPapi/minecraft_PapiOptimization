@@ -88,7 +88,6 @@ public class EntityCullingHandler {
                 double dot = toEntity.normalize().dot(lookVec);
                 if (dot < FRUSTUM_DOT_THRESHOLD) {
                     visibilityCache.put(id, false);
-                    lastCheckTicks.put(id, tickCounter);
                     continue;
                 }
             }
@@ -161,6 +160,24 @@ public class EntityCullingHandler {
                 null
         ));
         return hit.getType() == HitResult.Type.MISS;
+    }
+
+    @SubscribeEvent
+    public void onEntityJoin(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()) {
+            int id = event.getEntity().getId();
+            visibilityCache.remove(id);
+            lastCheckTicks.remove(id);
+        }
+    }
+
+    @SubscribeEvent
+    public void onEntityLeave(net.minecraftforge.event.entity.EntityLeaveLevelEvent event) {
+        if (event.getLevel().isClientSide()) {
+            int id = event.getEntity().getId();
+            visibilityCache.remove(id);
+            lastCheckTicks.remove(id);
+        }
     }
 
     public boolean isVisible(Entity entity) {
