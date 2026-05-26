@@ -6,21 +6,18 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 
 public class MobActivityController {
 
-    private static final double NEAR_RADIUS = 13.0;
-    private static final double FAR_RADIUS  = 45.0;
-    private static final int    MIN_AI_PERCENT       = 5;
-    private static final int    INVISIBLE_AI_PERCENT = 1;
+    private static final double NEAR_RADIUS    = 13.0;
+    private static final double FAR_RADIUS     = 45.0;
+    private static final int    MIN_AI_PERCENT = 5;
+    private static final int    CACHE_DURATION = 15;
 
-    private final EntityCullingHandler cullingHandler;
-    private final EntityLodHandler     lodHandler;
-
-    public MobActivityController(EntityCullingHandler cullingHandler, EntityLodHandler lodHandler) {
-        this.cullingHandler = cullingHandler;
-        this.lodHandler     = lodHandler;
-    }
+    private final Int2ObjectMap<CachedActivity> activityCache = new Int2ObjectOpenHashMap<>();
+    private long lastCleanupTime = 0;
 
     @SubscribeEvent
     public void onLivingTick(LivingEvent.LivingTickEvent event) {
@@ -31,27 +28,35 @@ public class MobActivityController {
         if (!mob.isAlive() || mob.isRemoved()) return;
 
         long gameTime = level.getGameTime();
-        double searchRadius = FAR_RADIUS + 16.0;
-        Player nearest = level.getNearestPlayer(mob, searchRadius);
+        int entityId = mob.getId();
 
-        if (!cullingHandler.isVisible(mob) || lodHandler.isHidden(mob)) {
-            if (!shouldTick(gameTime, INVISIBLE_AI_PERCENT)) {
-                event.setCanceled(true);
-            }
-            return;
+        if (gameTime - lastCleanupTime > 200) {
+            activityCache.keySet().removeIf(id -> level.getEntity(id) == null);
+            lastCleanupTime = gameTime;
         }
 
-        if (nearest == null) {
-            if (!shouldTick(gameTime, MIN_AI_PERCENT)) {
-                event.setCanceled(true);
+        CachedActivity cached = activityCache.get(entityId);
+        int aiPercent;
+
+        if (cached != null && gameTime - cached.lastCheckTime < CACHE_DURATION) {
+            aiPercent = cached.aiPercent;
+        } else {
+            Player nearest = level.getNearestPlayer(mob, FAR_RADIUS + 16.0);
+            if (nearest == null) {
+                aiPercent = MIN_AI_PERCENT;
+            } else {
+                double dist = mob.distanceTo(nearest);
+                aiPercent = computeAiPercent(dist);
             }
-            return;
+
+            if (cached == null) {
+                activityCache.put(entityId, new CachedActivity(gameTime, aiPercent));
+            } else {
+                cached.update(gameTime, aiPercent);
+            }
         }
 
-        double dist = mob.distanceTo(nearest);
-        int aiPercent = computeAiPercent(dist);
-
-        if (!shouldTick(gameTime, aiPercent)) {
+        if (!shouldTick(gameTime, aiPercent, entityId)) {
             event.setCanceled(true);
         }
     }
@@ -59,14 +64,28 @@ public class MobActivityController {
     private static int computeAiPercent(double dist) {
         if (dist <= NEAR_RADIUS) return 100;
         if (dist >= FAR_RADIUS)  return MIN_AI_PERCENT;
-
         double t = (dist - NEAR_RADIUS) / (FAR_RADIUS - NEAR_RADIUS);
         return (int) Math.round(100.0 + t * (MIN_AI_PERCENT - 100.0));
     }
 
-    private static boolean shouldTick(long gameTime, int percent) {
+    private static boolean shouldTick(long gameTime, int percent, int entityId) {
         if (percent >= 100) return true;
         if (percent <= 0)   return false;
-        return gameTime % Math.round(100.0f / percent) == 0;
+        return (gameTime + entityId) % 100 < percent;
+    }
+
+    private static class CachedActivity {
+        long lastCheckTime;
+        int aiPercent;
+
+        CachedActivity(long lastCheckTime, int aiPercent) {
+            this.lastCheckTime = lastCheckTime;
+            this.aiPercent = aiPercent;
+        }
+
+        void update(long lastCheckTime, int aiPercent) {
+            this.lastCheckTime = lastCheckTime;
+            this.aiPercent = aiPercent;
+        }
     }
 }

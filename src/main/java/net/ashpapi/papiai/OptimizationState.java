@@ -12,6 +12,12 @@ public class OptimizationState {
 
     public enum Level { NORMAL, MEDIUM, AGGRESSIVE }
 
+    private static OptimizationState INSTANCE;
+
+    public static OptimizationState getInstance() {
+        return INSTANCE;
+    }
+
     private static final int HIGH_FPS = 60;
     private static final int LOW_FPS = 30;
     private static final int UPDATE_INTERVAL = 20;
@@ -21,6 +27,10 @@ public class OptimizationState {
     private int tickCounter = 0;
 
     private ParticleStatus userParticleSetting = null;
+
+    public OptimizationState() {
+        INSTANCE = this;
+    }
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {

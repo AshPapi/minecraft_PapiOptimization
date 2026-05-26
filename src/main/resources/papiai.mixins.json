@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.ashpapi.papiai.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "papiai.refmap.json",
+  "mixins": [
+    "BlockEntityRenderDispatcherMixin",
+    "PathFinderMixin",
+    "EntityRenderDispatcherMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

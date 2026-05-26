@@ -9,6 +9,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
 
 import java.util.*;
 
@@ -22,7 +24,8 @@ public class EntityLodHandler {
     private static final int CHECK_INTERVAL = 10;
 
     private final OptimizationState state;
-    private final Set<Integer> hiddenEntities = new HashSet<>();
+    private final IntSet hiddenEntities = new IntOpenHashSet();
+    private final List<MobWithDist> mobPool = new ArrayList<>();
     private int tickCounter = 0;
 
     public EntityLodHandler(OptimizationState state) {
@@ -42,39 +45,52 @@ public class EntityLodHandler {
         ClientLevel level = mc.level;
         Vec3 playerPos = mc.player.position();
 
-        // лимиты зависят от текущего уровня оптимизации
-        int maxMid  = switch (state.getLevel()) {
-            case NORMAL -> 24;
-            case MEDIUM -> 16;
-            case AGGRESSIVE -> 8;
-        };
-        int maxFar  = switch (state.getLevel()) {
-            case NORMAL -> 8;
-            case MEDIUM -> 6;
-            case AGGRESSIVE -> 3;
-        };
-        int maxVFar = switch (state.getLevel()) {
-            case NORMAL -> 4;
-            case MEDIUM -> 2;
-            case AGGRESSIVE -> 1;
-        };
-
         hiddenEntities.clear();
 
-        List<MobWithDist> mobs = new ArrayList<>();
+        int activeMobCount = 0;
         for (Entity entity : level.entitiesForRendering()) {
             if (!(entity instanceof Mob)) continue;
             if (!entity.isAlive()) continue;
-            mobs.add(new MobWithDist(entity.getId(), entity.position().distanceTo(playerPos)));
+
+            MobWithDist mob;
+            if (activeMobCount < mobPool.size()) {
+                mob = mobPool.get(activeMobCount);
+            } else {
+                mob = new MobWithDist();
+                mobPool.add(mob);
+            }
+            mob.set(entity.getId(), entity.position().distanceTo(playerPos));
+            activeMobCount++;
         }
 
-        mobs.sort(Comparator.comparingDouble(MobWithDist::dist));
+        if (activeMobCount < 15) {
+            return;
+        }
+
+        int maxMid  = switch (state.getLevel()) {
+            case NORMAL -> 200;
+            case MEDIUM -> 48;
+            case AGGRESSIVE -> 16;
+        };
+        int maxFar  = switch (state.getLevel()) {
+            case NORMAL -> 80;
+            case MEDIUM -> 30;
+            case AGGRESSIVE -> 10;
+        };
+        int maxVFar = switch (state.getLevel()) {
+            case NORMAL -> 40;
+            case MEDIUM -> 15;
+            case AGGRESSIVE -> 5;
+        };
+
+        mobPool.subList(0, activeMobCount).sort(Comparator.comparingDouble(m -> m.dist));
 
         int midCount = 0;
         int farCount = 0;
         int vfarCount = 0;
 
-        for (MobWithDist mob : mobs) {
+        for (int i = 0; i < activeMobCount; i++) {
+            MobWithDist mob = mobPool.get(i);
             if (mob.dist <= MID_DIST) {
                 if (mob.dist > NEAR_DIST) {
                     midCount++;
@@ -98,5 +114,13 @@ public class EntityLodHandler {
         return hiddenEntities.contains(entity.getId());
     }
 
-    private record MobWithDist(int id, double dist) {}
+    private static class MobWithDist {
+        int id;
+        double dist;
+
+        void set(int id, double dist) {
+            this.id = id;
+            this.dist = dist;
+        }
+    }
 }
