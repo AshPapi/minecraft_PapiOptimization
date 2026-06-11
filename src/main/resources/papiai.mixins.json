@@ -8,7 +8,11 @@
     "BlockEntityRenderDispatcherMixin",
     "PathFinderMixin",
     "EntityRenderDispatcherMixin",
-    "LeavesBlockMixin"
+    "LeavesBlockMixin",
+    "ClientLevelMixin",
+    "GameRendererAccessor",
+    "LocalPlayerAccessor",
+    "LightTextureMixin"
   ],
   "client": [],
   "injectors": {

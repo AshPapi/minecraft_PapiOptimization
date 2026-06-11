@@ -87,7 +87,8 @@ public class EntityCullingHandler {
             if (dist > 2.0) {
                 double dot = toEntity.normalize().dot(lookVec);
                 if (dot < FRUSTUM_DOT_THRESHOLD) {
-                    visibilityCache.put(id, false);
+                    // Skip occlusion checks for entities outside the frustum to save CPU.
+                    // Do not write false to visibilityCache, as frustum culling is now handled dynamically per-frame.
                     continue;
                 }
             }
@@ -181,6 +182,27 @@ public class EntityCullingHandler {
     }
 
     public boolean isVisible(Entity entity) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return true;
+
+        if (mc.gameRenderer != null) {
+            Camera camera = mc.gameRenderer.getMainCamera();
+            if (camera != null) {
+                Vec3 camPos = camera.getPosition();
+                Vec3 lookVec = Vec3.directionFromRotation(camera.getXRot(), camera.getYRot());
+                Vec3 entityCenter = entity.getBoundingBox().getCenter();
+                Vec3 toEntity = entityCenter.subtract(camPos);
+                double dist = toEntity.length();
+
+                if (dist > 2.0) {
+                    double dot = toEntity.normalize().dot(lookVec);
+                    if (dot < FRUSTUM_DOT_THRESHOLD) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         return visibilityCache.getOrDefault(entity.getId(), true);
     }
 }

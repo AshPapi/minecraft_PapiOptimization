@@ -20,8 +20,6 @@ public class PapiAIMod {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             registerClientHandlers();
         }
-
-        MinecraftForge.EVENT_BUS.register(new CommonEvents());
     }
 
     private void registerClientHandlers() {
@@ -34,18 +32,11 @@ public class PapiAIMod {
         MinecraftForge.EVENT_BUS.register(cullingHandler);
         MinecraftForge.EVENT_BUS.register(lodHandler);
         MinecraftForge.EVENT_BUS.register(BlockEntityCullingHandler.getInstance());
-        MinecraftForge.EVENT_BUS.register(new DynamicRenderDistanceHandler(optimState));
-        MinecraftForge.EVENT_BUS.register(new SoundCullingHandler(optimState));
-    }
-
-    public static class CommonEvents {
-        @SubscribeEvent
-        public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-            if (event.getEntity() instanceof ServerPlayer player) {
-                player.sendSystemMessage(
-                        Component.literal("PapiAI: симуляция и рендер включены")
-                );
-            }
+        if (net.minecraftforge.fml.ModList.get().isLoaded("voxy") || net.minecraftforge.fml.ModList.get().isLoaded("distant_horizons")) {
+            System.out.println("[PapiAI] LOD mod detected (Voxy or Distant Horizons). Disabling DynamicRenderDistanceHandler to prevent conflict.");
+        } else {
+            MinecraftForge.EVENT_BUS.register(new DynamicRenderDistanceHandler(optimState));
         }
+        MinecraftForge.EVENT_BUS.register(new SoundCullingHandler(optimState));
     }
 }

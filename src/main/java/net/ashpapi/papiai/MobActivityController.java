@@ -14,7 +14,8 @@ public class MobActivityController {
     private static final double NEAR_RADIUS    = 13.0;
     private static final double FAR_RADIUS     = 45.0;
     private static final int    MIN_AI_PERCENT = 5;
-    private static final int    CACHE_DURATION = 15;
+    private static final int    CACHE_DURATION = 5;
+    private static final int    HURT_GRACE_TICKS = 60;
 
     private final Int2ObjectMap<CachedActivity> activityCache = new Int2ObjectOpenHashMap<>();
     private long lastCleanupTime = 0;
@@ -26,6 +27,17 @@ public class MobActivityController {
         if (!(entity.level() instanceof ServerLevel level)) return;
         if (!(entity instanceof Mob mob)) return;
         if (!mob.isAlive() || mob.isRemoved()) return;
+
+        // Mobs in combat must keep full AI (e.g. phantoms diving at the player)
+        if (mob.getTarget() != null || mob.isAggressive()) return;
+        if (mob.getLastHurtByMob() != null
+                && mob.tickCount - mob.getLastHurtByMobTimestamp() < HURT_GRACE_TICKS) return;
+
+        // Skipping ticks for airborne mobs freezes them mid-air (no gravity/flight)
+        if (!mob.onGround() && !mob.isInWater()) return;
+
+        // Baby growth advances in aiStep(); throttled babies would grow up to 20x slower
+        if (mob.isBaby()) return;
 
         long gameTime = level.getGameTime();
         int entityId = mob.getId();
@@ -71,7 +83,9 @@ public class MobActivityController {
     private static boolean shouldTick(long gameTime, int percent, int entityId) {
         if (percent >= 100) return true;
         if (percent <= 0)   return false;
-        return (gameTime + entityId) % 100 < percent;
+        // Spread allowed ticks evenly instead of one solid burst per 100 ticks,
+        // so a mob at 5% ticks every ~20 ticks rather than freezing for ~5 seconds
+        return ((gameTime + entityId) * percent) % 100 < percent;
     }
 
     private static class CachedActivity {
